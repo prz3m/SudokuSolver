@@ -236,6 +236,6 @@ class SudokuSolver:
                             print("not solved")
 
 
-ss = SudokuSolver("sudoku_trudne272.csv")
+ss = SudokuSolver("sudoku_hard272.csv")
 ss.solve()
 print(ss.sudoku)
