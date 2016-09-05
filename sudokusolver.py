@@ -82,7 +82,7 @@ class Sudoku:
         """
         return not np.any(self.sudoku == 0)
 
-    def validate(self):
+    def validate(self, verbose=False):
         """validation of solution by checking if there are duplicates in rows,
         columns and 3x3 squares
         """
@@ -92,6 +92,23 @@ class Sudoku:
             sq_set_len = len(set(self.sudoku[3*(i//3):3*(i//3)+3,
                                       3*(i % 3):3*(i % 3)+3].reshape(9)))
             if not (row_set_len == 9 and col_set_len == 9 and sq_set_len == 9):
+                if verbose:
+                    print("i: {}, row {}, col {}, sq {}".format(i, row_set_len, col_set_len, sq_set_len))
+                return False
+        return True
+
+    def validate2(self):
+        for i in range(9):
+            row_duplicates = len(list(i for i in self.sudoku[i, :] if i > 0))\
+                             - len(set(self.sudoku[i, :]) - {0})
+            col_duplicates = len(list(i for i in self.sudoku[:, i] if i > 0))\
+                             - len(set(self.sudoku[:, i]) - {0})
+            sq_duplicates = len(
+                list(i for i in self.sudoku[3*(i//3):3*(i//3)+3,
+                     3*(i % 3):3*(i % 3)+3].reshape(9) if i > 0))\
+                     - len(set(self.sudoku[3*(i//3):3*(i//3)+3,
+                                3*(i % 3):3*(i % 3)+3].reshape(9)) - {0})
+            if row_duplicates > 0 or col_duplicates > 0 or sq_duplicates > 0:
                 return False
         return True
 
@@ -190,6 +207,39 @@ class Sudoku:
         sudoku_string += "+---+---+---+\n"
         return sudoku_string
 
+    def give_next_empty_cell(self, i, j):
+        while True:
+            j += 1
+            if j == 9:
+                j = 0
+                i += 1
+                if i == 9:
+                    return -2, -2
+            if self.sudoku[i, j] == 0:
+                return i, j
+
+    def backtrack(self, i, j):
+        i, j = self.give_next_empty_cell(i, j)
+        if i == -2:
+            return 0
+
+        for value in self.sudoku_candidates[i, j]:
+            self.sudoku[i, j] = value
+            # print(i, j, value)
+            valid = self.validate2()
+            if not valid:
+                continue
+            else:
+                result = self.backtrack(i, j)
+                if result == -1:
+                    continue
+                elif result == 0:
+                    return 0
+
+        self.sudoku[i, j] = 0
+        # print(i, j)
+        return -1
+
 
 class SudokuSolver:
     """load sudoku from CSV file and solve using elimination and, if not
@@ -236,6 +286,12 @@ class SudokuSolver:
                             print("not solved")
 
 
-ss = SudokuSolver("sudoku_hard272.csv")
-ss.solve()
+sudoku_path = "sudoku_broken.csv"
+# ss = SudokuSolver(sudoku_path)
+# ss.solve()
+# print("logic:")
+# print(ss.sudoku)
+ss = SudokuSolver(sudoku_path)
+ss.sudoku.backtrack(0, -1)
+print("backtracking:")
 print(ss.sudoku)
