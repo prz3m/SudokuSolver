@@ -9,12 +9,14 @@ from random import shuffle
 class Sudoku:
     """sudoku board + methods to solve it
     """
-    def __init__(self, sudoku_array):
+    def __init__(self, filepath):
         """
         :param sudoku_array: sudoku borad as a numpy 9x9 array with zeros
                              instead of blanks
         """
-        self.sudoku = np.copy(sudoku_array)
+        self.sudoku = np.loadtxt(filepath, delimiter=',', dtype=int)
+        if np.any(self.sudoku > 9) or np.any(self.sudoku < 0):
+            raise ValueError("invalid sudoku")
         self.init_candidates()
         self.update_candidates()
 
@@ -83,22 +85,10 @@ class Sudoku:
         """
         return not np.any(self.sudoku == 0)
 
-    def validate(self, verbose=False):
+    def validate(self):
         """validation of solution by checking if there are duplicates in rows,
         columns and 3x3 squares
         """
-        for i in range(9):
-            row_set_len = len(set(self.sudoku[i, :]))
-            col_set_len = len(set(self.sudoku[:, i]))
-            sq_set_len = len(set(self.sudoku[3*(i//3):3*(i//3)+3,
-                                             3*(i % 3):3*(i % 3)+3].reshape(9)))
-            if not (row_set_len == 9 and col_set_len == 9 and sq_set_len == 9):
-                if verbose:
-                    print("i: {}, row {}, col {}, sq {}".format(i, row_set_len, col_set_len, sq_set_len))
-                return False
-        return True
-
-    def validate2(self):
         for i in range(9):
             row_duplicates = len(list(i for i in self.sudoku[i, :] if i > 0))\
                              - len(set(self.sudoku[i, :]) - {0})
@@ -115,9 +105,50 @@ class Sudoku:
                                 3*(i % 3):3*(i % 3)+3].reshape(9)) - {0})
             if sq_duplicates > 0:
                 return False
-            # if row_duplicates > 0 or col_duplicates > 0 or sq_duplicates > 0:
-            #     return False
         return True
+
+    def solve_with_guessing(self, verbose=True, multi_solution=False):
+        """tries to solve sudoku using elimination
+        if it fails, it tries to guess one number and then try again
+        usually finds solution quite fast
+        it doesn't use bruteforce/backtracking, so it will not handle
+        the hardest sudokus
+        :param multi_solution: checks if there are more than one solution
+        """
+        verboseprint = print if verbose else lambda *a, **k: None
+        solution_found = False
+
+        solved = self.solve()
+        if solved:
+            verboseprint("solved without guessing")
+        else:
+            verboseprint("not solved, trying guessing...")
+            sudoku_copy = np.copy(self.sudoku)
+            # try 1 split
+            for k in range(2, 10):
+                self.sudoku = np.copy(sudoku_copy)
+                self.init_candidates()
+                self.update_candidates()
+                for i, j in self.find_candidates(k):
+
+                    for cand in self.sudoku_candidates[i, j]:
+                        verboseprint("i: {0}, j: {1}, cand: {2}".format(i, j, cand))
+
+                        self.sudoku = np.copy(sudoku_copy)
+                        self.sudoku[i, j] = cand
+                        self.init_candidates()
+                        self.update_candidates()
+                        solved2 = self.solve()
+                        if solved2:
+                            if solution_found:
+                                verboseprint("multiple solutions")
+                                return True
+                            solution_found = True
+                            verboseprint("solved with guessing")
+                            if not multi_solution:
+                                return
+                        else:
+                            verboseprint("not solved")
 
     def solve(self):
         """solving sudoku using elimination
@@ -214,6 +245,9 @@ class Sudoku:
         sudoku_string += "+---+---+---+\n"
         return sudoku_string
 
+    def solve_using_backtracking(self):
+        self.backtrack(0, -1)
+
     def backtrack(self, i, j, shuffling=True):
         """solves sudoku using backtracking algorithm
         start by calling sudoku.backtrack(0, -1)
@@ -281,57 +315,12 @@ class Sudoku:
         self.sq_candidates[(i // 3) * 3 + j // 3] |= {value}
 
 
-class SudokuSolver:
-    """load sudoku from CSV file and solve using elimination and, if not
-    succesfull, a single guess
-    """
-    def __init__(self, filepath):
-        """
-        :param filepath: path of file with sudoku in CSV format, with zeros
-        instead of blanks
-        """
-        self.sudoku_array = np.loadtxt(filepath, delimiter=',', dtype=int)
-        if np.any(self.sudoku_array > 9) or np.any(self.sudoku_array < 0):
-            raise ValueError("invalid sudoku")
-        self.sudoku = Sudoku(self.sudoku_array)
-
-    def solve(self):
-        """tries to solve sudoku using elimination
-        if it fails, it tries to guess one number and then try again
-        usually finds solution quite fast
-        it doesn't use bruteforce/backtracking, so it will not handle
-        the hardest sudokus
-        """
-
-        solved = self.sudoku.solve()
-        if solved:
-            print("solved without guessing")
-        else:
-            print("not solved, trying guessing...")
-            # try 1 split
-            for k in range(2, 10):
-                for i, j in self.sudoku.find_candidates(k):
-                    for cand in self.sudoku.sudoku_candidates[i, j]:
-                        print("i: {0}, j: {1}, cand: {2}".format(i, j, cand))
-
-                        self.sudoku2 = Sudoku(self.sudoku_array)
-                        self.sudoku2.sudoku[i, j] = cand
-                        self.sudoku2.update_candidates()
-                        solved2 = self.sudoku2.solve()
-                        if solved2:
-                            print("solved with guessing")
-                            self.sudoku = self.sudoku2
-                            return
-                        else:
-                            print("not solved")
-
-
 sudoku_path = "sudoku_gen2.csv"
-ss = SudokuSolver(sudoku_path)
-ss.solve()
+sudoku = Sudoku(sudoku_path)
+sudoku.solve_with_guessing(multi_solution=True)
 print("logic:")
-print(ss.sudoku)
-ss = SudokuSolver(sudoku_path)
-ss.sudoku.backtrack(0, -1)
+print(sudoku)
+sudoku = Sudoku(sudoku_path)
+sudoku.solve_using_backtracking()
 print("backtracking:")
-print(ss.sudoku)
+print(sudoku)
