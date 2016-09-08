@@ -3,6 +3,7 @@
 @author: prz3m
 """
 import numpy as np
+from random import shuffle
 
 
 class Sudoku:
@@ -90,7 +91,7 @@ class Sudoku:
             row_set_len = len(set(self.sudoku[i, :]))
             col_set_len = len(set(self.sudoku[:, i]))
             sq_set_len = len(set(self.sudoku[3*(i//3):3*(i//3)+3,
-                                      3*(i % 3):3*(i % 3)+3].reshape(9)))
+                                             3*(i % 3):3*(i % 3)+3].reshape(9)))
             if not (row_set_len == 9 and col_set_len == 9 and sq_set_len == 9):
                 if verbose:
                     print("i: {}, row {}, col {}, sq {}".format(i, row_set_len, col_set_len, sq_set_len))
@@ -101,15 +102,21 @@ class Sudoku:
         for i in range(9):
             row_duplicates = len(list(i for i in self.sudoku[i, :] if i > 0))\
                              - len(set(self.sudoku[i, :]) - {0})
+            if row_duplicates > 0:
+                return False
             col_duplicates = len(list(i for i in self.sudoku[:, i] if i > 0))\
                              - len(set(self.sudoku[:, i]) - {0})
+            if col_duplicates > 0:
+                return False
             sq_duplicates = len(
                 list(i for i in self.sudoku[3*(i//3):3*(i//3)+3,
                      3*(i % 3):3*(i % 3)+3].reshape(9) if i > 0))\
                      - len(set(self.sudoku[3*(i//3):3*(i//3)+3,
                                 3*(i % 3):3*(i % 3)+3].reshape(9)) - {0})
-            if row_duplicates > 0 or col_duplicates > 0 or sq_duplicates > 0:
+            if sq_duplicates > 0:
                 return False
+            # if row_duplicates > 0 or col_duplicates > 0 or sq_duplicates > 0:
+            #     return False
         return True
 
     def solve(self):
@@ -207,38 +214,71 @@ class Sudoku:
         sudoku_string += "+---+---+---+\n"
         return sudoku_string
 
+    def backtrack(self, i, j, shuffling=True):
+        """solves sudoku using backtracking algorithm
+        start by calling sudoku.backtrack(0, -1)
+        """
+        try:
+            i, j = self.give_next_empty_cell(i, j)
+        except StopIteration:
+            # whole sudoku board filled
+            return 0
+
+        cands = list(self.give_cell_candidates(i, j))
+        if shuffling:
+            shuffle(cands)
+
+        for value in cands:
+            if self.check_if_value_conflicts(i, j, value):
+                continue
+            else:
+                self.sudoku[i, j] = value
+                self.delete_value_from_candidates_sets(i, j, value)
+                result = self.backtrack(i, j)
+                if result == -1:
+                    # conflict in next cell, try another candidate
+                    self.add_value_to_candidates_sets(i, j, value)
+                    continue
+                elif result == 0:
+                    # propagate good news that whole sudoku is filled
+                    return 0
+
+        # all candidates cause conflict, we must erase and step back
+        self.sudoku[i, j] = 0
+        return -1
+
     def give_next_empty_cell(self, i, j):
+        """gives coordinates of a next empty sudoku cell
+        """
         while True:
             j += 1
             if j == 9:
                 j = 0
                 i += 1
                 if i == 9:
-                    return -2, -2
+                    raise StopIteration
             if self.sudoku[i, j] == 0:
                 return i, j
 
-    def backtrack(self, i, j):
-        i, j = self.give_next_empty_cell(i, j)
-        if i == -2:
-            return 0
+    def give_cell_candidates(self, i, j):
+        return self.rows_candidates[i] & self.cols_candidates[j] &\
+                self.sq_candidates[(i // 3) * 3 + j // 3]
 
-        for value in self.sudoku_candidates[i, j]:
-            self.sudoku[i, j] = value
-            # print(i, j, value)
-            valid = self.validate2()
-            if not valid:
-                continue
-            else:
-                result = self.backtrack(i, j)
-                if result == -1:
-                    continue
-                elif result == 0:
-                    return 0
+    def check_if_value_conflicts(self, i, j, value):
+        return value in self.sudoku[i, :] or\
+               value in self.sudoku[:, j] or\
+               value in self.sudoku[(i // 3) * 3: (i // 3) * 3 + 3,
+                                  + (j // 3) * 3: (j // 3) * 3 + 3]
 
-        self.sudoku[i, j] = 0
-        # print(i, j)
-        return -1
+    def delete_value_from_candidates_sets(self, i, j, value):
+        self.rows_candidates[i] ^= {value}
+        self.cols_candidates[j] ^= {value}
+        self.sq_candidates[(i // 3) * 3 + j // 3] ^= {value}
+
+    def add_value_to_candidates_sets(self, i, j, value):
+        self.rows_candidates[i] |= {value}
+        self.cols_candidates[j] |= {value}
+        self.sq_candidates[(i // 3) * 3 + j // 3] |= {value}
 
 
 class SudokuSolver:
@@ -286,11 +326,11 @@ class SudokuSolver:
                             print("not solved")
 
 
-sudoku_path = "sudoku_broken.csv"
-# ss = SudokuSolver(sudoku_path)
-# ss.solve()
-# print("logic:")
-# print(ss.sudoku)
+sudoku_path = "sudoku_gen2.csv"
+ss = SudokuSolver(sudoku_path)
+ss.solve()
+print("logic:")
+print(ss.sudoku)
 ss = SudokuSolver(sudoku_path)
 ss.sudoku.backtrack(0, -1)
 print("backtracking:")
